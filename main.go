@@ -40,7 +40,7 @@ func main() {
 		}
 	}
 
-	blameInfo, err := getBlameInfo(repo, commit)
+	blameInfo, err := getBlameInfo(commit)
 	displayBlameInfo(blameInfo)
 }
 
@@ -53,13 +53,13 @@ func getLatestCommit(repo *git.Repository) (*object.Commit, error) {
 	return repo.CommitObject(head.Hash())
 }
 
-func getBlameInfo(repo *git.Repository, commit *object.Commit) (blameInfo BlameInfo, err error) {
+func getBlameInfo(commit *object.Commit) (blameInfo BlameInfo, err error) {
 	to, err := commit.Tree()
 	if err != nil {
-		return BlameInfo{}, err
+		return blameInfo, err
 	}
 
-	results := make(chan BlameInfo)
+	results := make(chan ResultWrapper)
 	numFiles := 0
 	_ = to.Files().ForEach(func(f *object.File) error {
 		go processFile(f, commit, results)
@@ -69,7 +69,11 @@ func getBlameInfo(repo *git.Repository, commit *object.Commit) (blameInfo BlameI
 
 	for i := 0; i < numFiles; i++ {
 		result := <- results
-		blameInfo = mergeBlameInfo(blameInfo, result)
+		if result.err != nil {
+			fmt.Printf("error: %v\n", result.err)
+			continue
+		}
+		blameInfo = mergeBlameInfo(blameInfo, result.blameInfo)
 	}
 
 	return blameInfo, err
@@ -94,32 +98,37 @@ func mergeBlameInfo(bi1, bi2 BlameInfo) BlameInfo {
 }
 
 func displayBlameInfo(blameInfo BlameInfo) {
+	totalLines := 0
+	for author := range blameInfo {
+		totalLines += blameInfo[author]
+	}
+
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Author", "Lines Covered"})
+	t.AppendHeader(table.Row{"Author", "Lines Covered", "Percent"})
 	total := 0
 	for author := range blameInfo {
+		percentage := fmt.Sprintf("%7.2f%%", 100 * (float64(blameInfo[author]) / float64(totalLines)))
 		t.AppendRow(table.Row{
-			author, blameInfo[author],
+			author, blameInfo[author], percentage,
 		})
 		total += blameInfo[author]
 	}
-	t.AppendFooter(table.Row{"Total", total})
+	t.AppendFooter(table.Row{"Total", total, fmt.Sprintf("%7.2f%%", 100 * (float64(totalLines) / float64(totalLines)))})
 	t.Render()
 }
 
-// TODO "contents and commits have different length" in output
-func processFile(f *object.File, commit *object.Commit, results chan<- BlameInfo) {
+func processFile(f *object.File, commit *object.Commit, results chan<- ResultWrapper) {
 	blameInfo := make(map[string]int)
 
 	blameResult, err := git.Blame(commit, f.Name)
 	if err != nil {
-		// TODO collect errors
-		fmt.Println(err)
+		results <- ResultWrapper{err: fmt.Errorf("%s: %v", f.Name, err)}
+		return
 	}
 
 	if blameResult == nil {
-		results <- blameInfo
+		results <- ResultWrapper{}
 		return
 	}
 
@@ -131,7 +140,12 @@ func processFile(f *object.File, commit *object.Commit, results chan<- BlameInfo
 		}
 	}
 
-	results <- blameInfo
+	results <- ResultWrapper{blameInfo: blameInfo}
 }
 
 type BlameInfo map[string]int
+
+type ResultWrapper struct {
+	blameInfo BlameInfo
+	err error
+}
