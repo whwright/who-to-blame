@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-PACKAGE="who-to-blame"
-
 build_for_platform() {
     local platform="${1}"
     if [[ -z "${platform}" ]]; then
@@ -13,7 +11,7 @@ build_for_platform() {
     GOOS=${platform_split[0]}
     GOARCH=${platform_split[1]}
 
-    local output_name="${PACKAGE}-${GOOS}-${GOARCH}"
+    local output_name="${PROJECT_NAME}-${GOOS}-${GOARCH}"
     if [[ ${GOOS} = "windows" ]]; then
         output_name+='.exe'
     fi
