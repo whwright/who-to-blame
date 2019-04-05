@@ -8,6 +8,7 @@ import (
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"os"
+	"sort"
 )
 
 var (
@@ -106,15 +107,20 @@ func displayBlameInfo(blameInfo BlameInfo) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"Author", "Lines Covered", "Percent"})
-	total := 0
+	var rows []table.Row
 	for author := range blameInfo {
 		percentage := fmt.Sprintf("%7.2f%%", 100 * (float64(blameInfo[author]) / float64(totalLines)))
-		t.AppendRow(table.Row{
+		rows = append(rows, table.Row{
 			author, blameInfo[author], percentage,
 		})
-		total += blameInfo[author]
 	}
-	t.AppendFooter(table.Row{"Total", total, fmt.Sprintf("%7.2f%%", 100 * (float64(totalLines) / float64(totalLines)))})
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i][1].(int) > rows[j][1].(int)
+	})
+
+	t.AppendRows(rows)
+	t.AppendFooter(table.Row{"Total", totalLines, fmt.Sprintf("%7.2f%%", 100 * (float64(totalLines) / float64(totalLines)))})
 	t.Render()
 }
 
