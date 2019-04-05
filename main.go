@@ -11,9 +11,12 @@ import (
 	"sort"
 )
 
+const version = "1.0.0"
+
 var (
 	commitHash = kingpin.Flag("commit", "optional commit hash to use").String()
 	repoPath   = kingpin.Arg("repo", "path to git repository").Required().String()
+	_          = kingpin.Version(version)
 )
 
 func main() {
